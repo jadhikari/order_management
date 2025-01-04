@@ -10,14 +10,23 @@ class IsSuperAdminOrRestaurantUser(BasePermission):
 
     def has_permission(self, request, view):
         user = request.user
-        if user.role == 'super_admin':
+
+        # Allow super_admins to access all data
+        if getattr(user, 'role', None) == 'super_admin':
             return True
-        return hasattr(user, 'restaurant') and user.restaurant is not None
+
+        # Allow access to users with an associated restaurant
+        return getattr(user, 'restaurant', None) is not None
 
     def has_object_permission(self, request, view, obj):
         user = request.user
-        if user.role == 'super_admin':
+
+        # Allow super_admins to access all objects
+        if getattr(user, 'role', None) == 'super_admin':
             return True
+
+        # Check if the object is associated with a restaurant
         if hasattr(obj, 'restaurant') and obj.restaurant:
-            return obj.restaurant == user.restaurant
+            return obj.restaurant == getattr(user, 'restaurant', None)
+
         return False

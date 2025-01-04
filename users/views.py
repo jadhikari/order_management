@@ -45,7 +45,7 @@ class ChangePasswordView(APIView):
 
 class CustomUserViewSet(viewsets.ModelViewSet):
     serializer_class = CustomUserSerializer
-    permission_classes = [IsAuthenticated, IsSuperAdminOrRestaurantUser]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -56,7 +56,7 @@ class CustomUserViewSet(viewsets.ModelViewSet):
 
 class RestaurantViewSet(viewsets.ModelViewSet):
     serializer_class = RestaurantSerializer
-    permission_classes = [IsAuthenticated, IsSuperAdminOrRestaurantUser]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
