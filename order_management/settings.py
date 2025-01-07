@@ -79,14 +79,21 @@ WSGI_APPLICATION = 'order_management.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'restaurant_db',
+#         'USER': 'restaurant_db',
+#         'PASSWORD': 'restaurant*password131',
+#         'HOST': '127.0.0.1',  # Use 'localhost' or your specific host
+#         'PORT': '5432',        # Default PostgreSQL port
+#     }
+# }
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'restaurant_db',
-        'USER': 'restaurant_db',
-        'PASSWORD': 'restaurant*password131',
-        'HOST': '127.0.0.1',  # Use 'localhost' or your specific host
-        'PORT': '5432',        # Default PostgreSQL port
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": "mydatabase",
     }
 }
 

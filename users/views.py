@@ -1,65 +1,120 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status, viewsets
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.views import TokenObtainPairView
-from .models import CustomUser, Restaurant
-from .serializers import (
-    CustomUserSerializer,
-    RestaurantSerializer,
-    CustomTokenObtainPairSerializer,
-    ChangePasswordSerializer
-)
-from .permissions import IsSuperAdminOrRestaurantUser
+from rest_framework import viewsets, permissions
+from .models import CustomUser, Restaurant, RestaurantProfile
+from .serializers import CustomUserSerializer, RestaurantSerializer, RestaurantProfileSerializer
+from rest_framework.permissions import BasePermission
 
 
-class CustomTokenView(TokenObtainPairView):
-    serializer_class = CustomTokenObtainPairSerializer
+class IsSuperAdminOrReadOnlyForAdmins(permissions.BasePermission):
+    """
+    Custom permission for RestaurantViewSet:
+    - Super Admins: Full access (CRUD).
+    - Admins: Read-only access to their restaurant.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if user.role == 'super_admin' or user.is_superuser:
+            return True
+        if user.role == 'admin' and view.action in ['list', 'retrieve']:
+            return True
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if user.role == 'super_admin' or user.is_superuser:
+            return True
+        if user.role == 'admin':
+            return obj == user.restaurant
+        return False
 
 
-class ChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
+class IsSuperAdminOrAdminForStaff(permissions.BasePermission):
+    """
+    Custom permission for CustomUserViewSet:
+    - Super Admins: Full access (CRUD).
+    - Admins: Manage staff accounts for their restaurant only.
+    """
 
-    def post(self, request, *args, **kwargs):
-        serializer = ChangePasswordSerializer(data=request.data)
-        if serializer.is_valid():
-            user_id = serializer.validated_data['user_id']
-            new_password = serializer.validated_data['new_password']
-            try:
-                user_to_update = CustomUser.objects.get(id=user_id)
-            except CustomUser.DoesNotExist:
-                return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+    def has_permission(self, request, view):
+        user = request.user
+        if user.is_superuser or user.role in ['super_admin', 'admin']:
+            return True
+        return False
 
-            # Check permissions
-            if request.user.role == 'super_admin':
-                serializer.update_password(user_to_update, new_password)
-            elif request.user.role == 'admin' and user_to_update.restaurant == request.user.restaurant:
-                serializer.update_password(user_to_update, new_password)
-            else:
-                return Response({"error": "You do not have permission to change this password."}, status=status.HTTP_403_FORBIDDEN)
-
-            return Response({"success": "Password updated successfully."}, status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if user.is_superuser or user.role == 'super_admin':
+            return True
+        if user.role == 'admin':
+            return obj.restaurant == user.restaurant
+        return False
 
 
 class CustomUserViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing CustomUser:
+    - Super Admins: Full CRUD for all users.
+    - Admins: Full CRUD for staff accounts (cook, waiter, accountant) of their restaurant.
+    """
     serializer_class = CustomUserSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminOrAdminForStaff]
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'super_admin':
+        if user.role == 'super_admin' or user.is_superuser:
             return CustomUser.objects.all()
-        return CustomUser.objects.filter(restaurant=user.restaurant)
+        if user.role == 'admin':
+            return CustomUser.objects.filter(
+                restaurant=user.restaurant, role__in=['cook', 'waiter', 'accountant']
+            )
+        return CustomUser.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role == 'admin':
+            serializer.save(restaurant=user.restaurant, created_by=user)
+        else:
+            serializer.save(created_by=user)
+
+    def perform_update(self, serializer):
+        serializer.save()
 
 
-class RestaurantViewSet(viewsets.ModelViewSet):
+class RestaurantViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for managing Restaurants:
+    - Super Admins: Full CRUD for all restaurants.
+    - Admins: Read-only access to their restaurant.
+    """
     serializer_class = RestaurantSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdminOrReadOnlyForAdmins]
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'super_admin':
+        if user.role == 'super_admin' or user.is_superuser:
             return Restaurant.objects.all()
-        return Restaurant.objects.filter(id=user.restaurant.id)
+        if user.role == 'admin':
+            return Restaurant.objects.filter(id=user.restaurant.id)
+        return Restaurant.objects.none()
+
+
+class RestaurantProfileViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing Profiles:
+    - Super Admins: Full CRUD for all profiles.
+    - Admins: Full CRUD for profiles of staff linked to their restaurant.
+    """
+    serializer_class = RestaurantProfileSerializer
+    permission_classes = [IsSuperAdminOrAdminForStaff]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'super_admin' or user.is_superuser:
+            return RestaurantProfile.objects.all()
+        if user.role == 'admin':
+            return RestaurantProfile.objects.filter(restaurant=user.restaurant)
+        return RestaurantProfile.objects.none()
+
+    def perform_create(self, serializer):
+        serializer.save()
+
